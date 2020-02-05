@@ -1174,18 +1174,142 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
 
                 loc_times = numpy.take(result['times_' + str(ielec)], myslice2)
                 loc_clusters = numpy.take(cluster_results[p][ielec]['groups'], mask)
-    
+
+                # TODO test.
+
+                # Pre-compute all the first components (for each group).
+                all_first_flat = {}
+
+                for group_1 in numpy.unique(loc_clusters):
+
+                    myslice = numpy.where(cluster_results[p][ielec]['groups'] == group_1)[0]
+
+                    if extraction == 'median-raw':
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
+                        times_i = numpy.take(loc_times, labels_i)
+                        sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
+                        first_component = numpy.median(sub_data_raw, 0)
+                    elif extraction == 'mean-raw':
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
+                        times_i = numpy.take(loc_times, labels_i)
+                        sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
+                        first_component = numpy.mean(sub_data_raw, 0)
+                    else:
+                        raise ValueError("unexpected value %s" % extraction)
+
+                    if use_savgol and savgol_window > 3:
+                        tmp_fast = scipy.signal.savgol_filter(first_component, savgol_window, 3, axis=1)
+                        tmp_slow = scipy.signal.savgol_filter(first_component, 3 * savgol_window, 3, axis=1)
+                        first_component = savgol_filter * tmp_fast + (1 - savgol_filter) * tmp_slow
+
+                    if comp_templates:  # i.e. template compression active
+                        local_stds = numpy.std(first_component, 1)
+                        to_delete = numpy.where(local_stds / stds[indices] < sparsify)[0]
+                        first_component[to_delete, :] = 0
+
+                    x, y, z = sub_data_raw.shape
+                    sub_data_raw[:, to_delete, :] = 0
+                    sub_data_flat_raw = sub_data_raw.reshape(x, y * z)
+                    first_flat = first_component.reshape(y * z, 1)
+                    amplitudes = numpy.dot(sub_data_flat_raw, first_flat)
+                    amplitudes /= numpy.sum(first_flat ** 2)
+                    center = numpy.median(amplitudes)
+
+                    # We are rescaling the template such that median amplitude is exactly 1
+                    # This is changed because of the smoothing
+                    first_component *= center
+
+                    first_flat = first_component.reshape(y * z, 1)
+
+                    all_first_flat[group_1] = first_flat
+
+                # Pre-compute all the amplitudes and scalar products (for each pair of group)
+
+                all_amplitudes = {}
+                all_scalar_products = {}
+                all_dot_products = {}
+
+                for group_1 in numpy.unique(loc_clusters):
+
+                    myslice = numpy.where(cluster_results[p][ielec]['groups'] == group_1)[0]
+
+                    if extraction == 'median-raw':
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
+                        times_i = numpy.take(loc_times, labels_i)
+                        sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
+                        first_component = numpy.median(sub_data_raw, 0)
+                    elif extraction == 'mean-raw':
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
+                        times_i = numpy.take(loc_times, labels_i)
+                        sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
+                        first_component = numpy.mean(sub_data_raw, 0)
+                    else:
+                        raise ValueError("unexpected value %s" % extraction)
+
+                    if use_savgol and savgol_window > 3:
+                        tmp_fast = scipy.signal.savgol_filter(first_component, savgol_window, 3, axis=1)
+                        tmp_slow = scipy.signal.savgol_filter(first_component, 3 * savgol_window, 3, axis=1)
+                        first_component = savgol_filter * tmp_fast + (1 - savgol_filter) * tmp_slow
+
+                    if comp_templates:
+                        local_stds = numpy.std(first_component, 1)
+                        to_delete = numpy.where(local_stds / stds[indices] < sparsify)[0]
+                        first_component[to_delete, :] = 0
+
+                    # if p == 'neg':
+                    #     tmpidx = numpy.unravel_index(first_component.argmin(), first_component.shape)
+                    #     ratio = -thresholds[indices[tmpidx[0]]] / first_component[tmpidx[0]].min()
+                    # elif p == 'pos':
+                    #     tmpidx = numpy.unravel_index(first_component.argmax(), first_component.shape)
+                    #     ratio = thresholds[indices[tmpidx[0]]] / first_component[tmpidx[0]].max()
+                    #
+                    # shift = template_shift - tmpidx[1]
+                    # is_noise = len(indices) == len(to_delete) or (1 / ratio) < noise_thresh
+
+                    x, y, z = sub_data_raw.shape
+                    sub_data_raw[:, to_delete, :] = 0
+                    sub_data_flat_raw = sub_data_raw.reshape(x, y * z)
+
+                    all_amplitudes[group_1] = {}
+                    all_scalar_products[group_1] = {}
+                    all_dot_products[group_1] = {}
+
+                    for group_2 in numpy.unique(loc_clusters):
+
+                        first_flat = all_first_flat[group_2]
+                        dot_products = numpy.dot(sub_data_flat_raw, first_flat)
+                        amplitudes = dot_products / numpy.sum(first_flat ** 2)
+                        scalar_products = dot_products / np.square(numpy.sum(first_flat ** 2))
+
+                        all_amplitudes[group_1][group_2] = amplitudes
+                        all_scalar_products[group_1][group_2] = scalar_products
+                        all_dot_products[group_1][group_2] = dot_products
+
+                # TODO end.
+
                 for group in numpy.unique(loc_clusters):
                     electrodes[g_count] = ielec
                     myslice = numpy.where(cluster_results[p][ielec]['groups'] == group)[0]
-                    
+
                     if extraction == 'median-raw':
-                        labels_i = numpy.random.permutation(myslice)[:250]
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
                         times_i = numpy.take(loc_times, labels_i)
                         sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
                         first_component = numpy.median(sub_data_raw, 0)
                     elif extraction == 'mean-raw':                
-                        labels_i = numpy.random.permutation(myslice)[:250]
+                        # labels_i = numpy.random.permutation(myslice)[:250]
+                        numpy.random.seed(42)
+                        labels_i = numpy.random.permutation(myslice)[:500]
                         times_i = numpy.take(loc_times, labels_i)
                         sub_data_raw = io.get_stas(params, times_i, labels_i, ielec, neighs=indices, nodes=nodes, pos=p)
                         first_component = numpy.mean(sub_data_raw, 0)
@@ -1263,6 +1387,103 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
 
                         amps_lims[g_count] = [amp_min, amp_max]
                         myamps += [[amp_min, amp_max]]
+
+                        # TODO quick sanity plot (amplitude values used to set amplitude limits).
+                        if make_plots not in ['None', '']:
+                            import matplotlib.pyplot as plt
+                            fig, axes = plt.subplots(
+                                nrows=4, ncols=2, squeeze=False, gridspec_kw={'width_ratios': [0.8, 0.2]},
+                                figsize=[2.0 * 6.4, 2.0 * 4.8]
+                            )
+                            x = np.arange(0, amplitudes.size)
+                            y = amplitudes
+                            # ...
+                            ax = axes[0, 0]
+                            for other_group in numpy.unique(loc_clusters):
+                                # other_amplitudes = all_amplitudes[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                other_amplitudes = all_amplitudes[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                x_ = np.arange(0, other_amplitudes.size)
+                                y_ = other_amplitudes
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.scatter(x_, y_, s=2**2, color=color_)
+                            # ax.scatter(x, y, s=1**2, color='black')
+                            ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.axhline(y=1.0, color='gray', linewidth=0.3)
+                            ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
+                            # ax.set_xlabel("point")
+                            ax.set_ylabel("amplitude")
+                            ax.set_title("template of cluster of interest vs snippets of other clusters")
+                            xlim = ax.get_xlim()
+                            range_ = ax.get_ylim()
+                            # ...
+                            ax = axes[0, 1]
+                            # ax.hist(y, bins=50, range=range_, color='black', orientation='horizontal')
+                            ax.hist(y, bins=50, range=range_, color='C{}'.format(group % 10), orientation='horizontal')
+                            # ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.axhline(y=amp_min, color='gray', linewidth=0.3)
+                            ax.axhline(y=1.0, color='gray', linewidth=0.3)
+                            # ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.axhline(y=amp_max, color='gray', linewidth=0.3)
+                            ax.set_ylim(*range_)
+                            # ...
+                            ax = axes[1, 0]
+                            for other_group in numpy.unique(loc_clusters):
+                                other_scalar_products = all_scalar_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_scalar_products = all_scalar_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                x_ = np.arange(0, other_scalar_products.size)
+                                y_ = other_scalar_products
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.scatter(x_, y_, s=2**2, color=color_)
+                            ax.set_xlim(*xlim)
+                            # ax.set_xlabel("point")
+                            ax.set_ylabel("scalar product")
+                            ax.set_title("snippets of cluster of interest vs templates of other clusters")
+                            # ...
+                            ax = axes[1, 1]
+                            ax.axis('off')
+                            # ...
+                            ax = axes[2, 0]
+                            for other_group in numpy.unique(loc_clusters):
+                                other_dot_products = all_dot_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_dot_products = all_dot_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                x_ = np.arange(0, other_dot_products.size)
+                                y_ = other_dot_products
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.scatter(x_, y_, s=2 ** 2, color=color_)
+                            ax.set_xlim(*xlim)
+                            # ax.set_xlabel("point")
+                            ax.set_ylabel("dot product")
+                            ax.set_title("snippets of cluster of interest vs templates of other clusters")
+                            # ...
+                            ax = axes[2, 1]
+                            ax.axis('off')
+                            # ...
+                            # ...
+                            ax = axes[3, 0]
+                            for other_group in numpy.unique(loc_clusters):
+                                other_amplitudes = all_amplitudes[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_amplitudes = all_amplitudes[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                x_ = np.arange(0, other_amplitudes.size)
+                                y_ = other_amplitudes
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.scatter(x_, y_, s=2 ** 2, color=color_)
+                            ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.axhline(y=1.0, color='gray', linewidth=0.3)
+                            ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.set_xlim(*xlim)
+                            ax.set_xlabel("point")
+                            ax.set_ylabel("amplitude")
+                            ax.set_title("snippets of cluster of interest vs templates of other clusters")
+                            # ...
+                            ax = axes[3, 1]
+                            ax.axis('off')
+                            # ...
+                            plt.tight_layout()
+                            # Save figure.
+                            output_path = os.path.join(plot_path, '%s_e%d_g%d.%s' % (p, ielec, group, make_plots))
+                            fig.savefig(output_path)
+                            plt.close(fig)
+                        # TODO end.
 
                         offset = total_nb_clusters + count_templates
                         sub_templates = numpy.zeros((N_e, N_t), dtype=numpy.float32)
