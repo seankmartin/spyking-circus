@@ -1285,7 +1285,7 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
                     for group_2 in numpy.unique(loc_clusters):
 
                         first_flat = all_first_flat[group_2]
-                        dot_products = numpy.dot(sub_data_flat_raw, first_flat)
+                        dot_products = numpy.dot(sub_data_flat_raw, first_flat).flatten()
                         amplitudes = dot_products / numpy.sum(first_flat ** 2)
                         scalar_products = dot_products / np.square(numpy.sum(first_flat ** 2))
 
@@ -1395,8 +1395,8 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
                                 nrows=4, ncols=2, squeeze=False, gridspec_kw={'width_ratios': [0.8, 0.2]},
                                 figsize=[2.0 * 6.4, 2.0 * 4.8]
                             )
-                            x = np.arange(0, amplitudes.size)
-                            y = amplitudes
+                            # x = np.arange(0, amplitudes.size)
+                            # y = amplitudes
                             # ...
                             ax = axes[0, 0]
                             for other_group in numpy.unique(loc_clusters):
@@ -1418,13 +1418,20 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
                             # ...
                             ax = axes[0, 1]
                             # ax.hist(y, bins=50, range=range_, color='black', orientation='horizontal')
-                            ax.hist(y, bins=50, range=range_, color='C{}'.format(group % 10), orientation='horizontal')
-                            # ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
-                            ax.axhline(y=amp_min, color='gray', linewidth=0.3)
+                            # ax.hist(y, bins=50, range=range_, color='C{}'.format(group % 10), orientation='horizontal')
+                            for other_group in numpy.unique(loc_clusters):
+                                # other_amplitudes = all_amplitudes[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                other_amplitudes = all_amplitudes[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                y_ = other_amplitudes
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.hist(y_, bins=50, range=range_, color=color_, orientation='horizontal', alpha=0.4)
+                            ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
+                            # ax.axhline(y=amp_min, color='gray', linewidth=0.3)
                             ax.axhline(y=1.0, color='gray', linewidth=0.3)
-                            # ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
-                            ax.axhline(y=amp_max, color='gray', linewidth=0.3)
+                            ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
+                            # ax.axhline(y=amp_max, color='gray', linewidth=0.3)
                             ax.set_ylim(*range_)
+                            ax.set_yticklabels([])
                             # ...
                             ax = axes[1, 0]
                             for other_group in numpy.unique(loc_clusters):
@@ -1435,48 +1442,100 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
                                 color_ = 'C{}'.format(other_group % 10)
                                 ax.scatter(x_, y_, s=2**2, color=color_)
                             ax.set_xlim(*xlim)
+                            range_ = ax.get_ylim()
                             # ax.set_xlabel("point")
                             ax.set_ylabel("scalar product")
                             ax.set_title("snippets of cluster of interest vs templates of other clusters")
                             # ...
                             ax = axes[1, 1]
-                            ax.axis('off')
+                            # ax.axis('off')
+                            for other_group in numpy.unique(loc_clusters):
+                                other_scalar_products = all_scalar_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_scalar_products = all_scalar_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                y_ = other_scalar_products
+                                color_ = 'C{}'.format(other_group % 10)
+                                ax.hist(y_, bins=50, range=range_, color=color_, orientation='horizontal', alpha=0.4)
+                            ax.set_ylim(*range_)
+                            ax.set_yticklabels([])
                             # ...
                             ax = axes[2, 0]
+                            dot_products_of_interest = all_dot_products[group][group]
                             for other_group in numpy.unique(loc_clusters):
                                 other_dot_products = all_dot_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
                                 # other_dot_products = all_dot_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
                                 x_ = np.arange(0, other_dot_products.size)
                                 y_ = other_dot_products
                                 color_ = 'C{}'.format(other_group % 10)
-                                ax.scatter(x_, y_, s=2 ** 2, color=color_)
+                                selection = dot_products_of_interest <= other_dot_products
+                                ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=1.0)
+                                selection = dot_products_of_interest > other_dot_products
+                                ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=0.1)
                             ax.set_xlim(*xlim)
+                            range_ = ax.get_ylim()
                             # ax.set_xlabel("point")
                             ax.set_ylabel("dot product")
                             ax.set_title("snippets of cluster of interest vs templates of other clusters")
                             # ...
                             ax = axes[2, 1]
-                            ax.axis('off')
-                            # ...
+                            dot_products_of_interest = all_dot_products[group][group]
+                            # ax.axis('off')
+                            for other_group in numpy.unique(loc_clusters):
+                                color_ = 'C{}'.format(other_group % 10)
+                                other_dot_products = all_dot_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_dot_products = all_dot_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                y_ = other_dot_products
+                                ax.hist(y_, bins=50, range=range_, facecolor='None', edgecolor=color_,histtype='stepfilled', orientation='horizontal', alpha=0.4)
+                                selection = dot_products_of_interest <= other_dot_products
+                                if y_[selection].size == 0:
+                                    continue
+                                ax.hist(y_[selection], bins=50, range=range_, color=color_, histtype='stepfilled', orientation='horizontal', alpha=0.4)
+                            ax.set_ylim(*range_)
+                            ax.set_yticklabels([])
                             # ...
                             ax = axes[3, 0]
+                            dot_products_of_interest = all_dot_products[group][group]
                             for other_group in numpy.unique(loc_clusters):
+                                color_ = 'C{}'.format(other_group % 10)
+                                other_dot_products = all_dot_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_dot_products = all_dot_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
                                 other_amplitudes = all_amplitudes[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
                                 # other_amplitudes = all_amplitudes[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
                                 x_ = np.arange(0, other_amplitudes.size)
                                 y_ = other_amplitudes
-                                color_ = 'C{}'.format(other_group % 10)
-                                ax.scatter(x_, y_, s=2 ** 2, color=color_)
+                                selection = dot_products_of_interest <= other_dot_products
+                                ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=1.0)
+                                selection = dot_products_of_interest > other_dot_products
+                                ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=0.1)
                             ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
                             ax.axhline(y=1.0, color='gray', linewidth=0.3)
                             ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
                             ax.set_xlim(*xlim)
+                            range_ = ax.get_ylim()
                             ax.set_xlabel("point")
                             ax.set_ylabel("amplitude")
                             ax.set_title("snippets of cluster of interest vs templates of other clusters")
                             # ...
                             ax = axes[3, 1]
-                            ax.axis('off')
+                            # ax.axis('off')
+                            dot_products_of_interest = all_dot_products[group][group]
+                            for other_group in numpy.unique(loc_clusters):
+                                color_ = 'C{}'.format(other_group % 10)
+                                other_dot_products = all_dot_products[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_dot_products = all_dot_products[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                other_amplitudes = all_amplitudes[group][other_group]  # i.e. points du groupe projetés sur les autres groupes
+                                # other_amplitudes = all_amplitudes[other_group][group]  # i.e. points des autres groupes projetés sur le groupe
+                                y_ = other_amplitudes
+                                ax.hist(y_, bins=50, range=range_, facecolor='None', edgecolor=color_, histtype='stepfilled', orientation='horizontal', alpha=0.4)
+                                selection = dot_products_of_interest <= other_dot_products
+                                if y_[selection].size == 0:
+                                    continue
+                                ax.hist(y_[selection], bins=50, range=range_, color=color_, histtype='stepfilled', orientation='horizontal', alpha=0.4)
+                            ax.axhline(y=amp_min, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.axhline(y=1.0, color='gray', linewidth=0.3)
+                            ax.axhline(y=amp_max, color='C{}'.format(group % 10), linewidth=0.3)
+                            ax.set_ylim(*range_)
+                            ax.set_yticklabels([])
+                            ax.set_xlabel("nb. points")
                             # ...
                             plt.tight_layout()
                             # Save figure.
@@ -1485,6 +1544,50 @@ def main(params, nb_cpu, nb_gpu, use_gpu):
                             plt.close(fig)
                         # TODO end.
 
+                        # TODO quick sanity plot (amplitude values used to set amplitude limits).
+                        if make_plots not in ['None', '']:
+                            import matplotlib.pyplot as plt
+                            fig, axes = plt.subplots(
+                                nrows=1, ncols=2, squeeze=False, gridspec_kw={'width_ratios': [0.8, 0.2]},
+                                figsize=[1.0 * 6.4, 1.0 * 4.8]
+                            )
+                        # ...
+                        ax = axes[0, 0]
+                        # Plot the amplitude which should be accepted.
+                        amplitudes_of_interest = all_amplitudes[group][group]
+                        x_ = np.arange(0, amplitudes_of_interest.size)
+                        y_ = amplitudes_of_interest
+                        color_ = 'C{}'.format(group % 10)
+                        ax.scatter(x_, y_, s=2 ** 2, color=color_, alpha=1.0)
+                        ax.axhline(y=amp_min, color=color_, linewidth=0.3)
+                        ax.axhline(y=1.0, color=color_, linewidth=0.3)
+                        ax.axhline(y=amp_max, color=color_, linewidth=0.3)
+                        # For each cluster...
+                        for other_group in numpy.unique(loc_clusters):
+                            if other_group == group:
+                                continue
+                            dot_products_of_reference = all_dot_products[other_group][other_group]
+                            dot_products = all_dot_products[other_group][group]
+                            amplitudes = all_amplitudes[other_group][group]
+                            x_ = np.arange(0, amplitudes.size)
+                            y_ = amplitudes
+                            color_ = 'C{}'.format(other_group % 10)
+                            # Plot the amplitudes which have not been considered.
+                            selection = dot_products_of_reference > dot_products  # i.e. not considered
+                            ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=0.1)
+                            # Plot the amplitudes which should be rejected.
+                            selection = dot_products_of_reference <= dot_products  # i.e. considered
+                            ax.scatter(x_[selection], y_[selection], s=2 ** 2, color=color_, alpha=1.0)
+                        # ...
+                        ax = axes[0, 1]
+                        ax.axis('off')  # TODO replace!
+                        # ...
+                        plt.tight_layout()
+                        # Save figure.
+                        output_path = os.path.join(plot_path, 'amplitude_interval_%s_e%d_g%d.%s' % (p, ielec, group, make_plots))
+                        fig.savefig(output_path)
+                        plt.close(fig)
+                        # TODO end.
                         offset = total_nb_clusters + count_templates
                         sub_templates = numpy.zeros((N_e, N_t), dtype=numpy.float32)
 
