@@ -157,17 +157,17 @@ Merging
 The merging section is::
 
     erase_all      = True       # If False, a prompt will ask you to remerge if merged has already been done
-    cc_overlap     = 0.85       # Only templates with CC higher than cc_overlap may be merged
+    cc_overlap     = 0.75       # Only templates with CC higher than cc_overlap may be merged
     cc_bin         = 2          # Bin size for computing CC [in ms]
     default_lag    = 5          # Default length of the period to compute dip in the CC [ms]
     auto_mode      = 0.75       # Between 0 (aggressive) and 1 (no merging). If empty, GUI is launched
-    remove_noise   = False      # If True, meta merging will remove obvious noise templates (weak amplitudes)
+    remove_noise   = True       # If True, meta merging will remove obvious noise templates (weak amplitudes)
     noise_limit    = 0.75       # Amplitude at which templates are classified as noise
     sparsity_limit = 0.75       # Sparsity level (in percentage) for selecting templates as putative noise (in [0, 1])
     time_rpv       = 5          # Time [in ms] to consider for Refraction Period Violations (RPV) (0 to disable)
     rpv_threshold  = 0.02       # Percentage of RPV allowed while merging
     merge_drifts   = True       # Try to automatically merge drifts, i.e. non overlapping spiking neurons
-    drift_limit    = 0.1        # Distance for drifts. The higher, the more non-overlapping the activities should be
+    drift_limit    = 1          # Distance for drifts. The higher, the more non-overlapping the activities should be
 
 To know more about how those merges are performed and how to use this option, see :doc:`Automatic Merging <../code/merging>`. Parameters that are most likely to be changed:
     * ``erase_all`` If you want to always erase former merging, and skip the prompt
